@@ -1,0 +1,3 @@
+/cygdrive/c/Users/Tric/Documents/C simulation/Chapter 2/build/CMakeFiles/simulation.dir
+/cygdrive/c/Users/Tric/Documents/C simulation/Chapter 2/build/CMakeFiles/edit_cache.dir
+/cygdrive/c/Users/Tric/Documents/C simulation/Chapter 2/build/CMakeFiles/rebuild_cache.dir
