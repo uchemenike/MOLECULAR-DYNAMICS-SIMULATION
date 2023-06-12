@@ -594,7 +594,7 @@ void SetupFiles()
     int k;
 
     // Initialize filenames for checkpointing and snapshot records
-    for (k = 0; k < sizeof(fileNameR) / sizeof(fileNameR[0]); k++)
+    for (k = 0; k < sizeof(fileNameR); k++)
     {
         strcpy(fileName[k], fileNameR[k]);
         fileName[k][0] = progId[0];
@@ -2099,7 +2099,7 @@ int main(int argc, char **argv)
         polyVol.sum2 /= regionVol;
 
         eulerSum = polyGeom[0].sum + polyGeom[2].sum - polyGeom[1].sum;
-
+        printf("eulerSum: %d", eulerSum);
         // ... (print the results) ...
     }
 }
@@ -2110,12 +2110,12 @@ int main(int argc, char **argv)
 // {
 //     runId = atoi (argv[1]);
 //     rClust = atof (argv[2]);
-//     SetupFiles (); 5
+//     SetupFiles ();
 //     blockNum = -1;
 //     while (GetConfig ()) {
 //         InitClusters ();
 //         BuildClusters ();
-//         CompressClusters (); 10
+//         CompressClusters ();
 //         AnalClusterSize ();
 //         printf ("%d %d %d %.1f %.1f\n", nSingle, nClust, bigSize,
 //             PropEst (cSize));

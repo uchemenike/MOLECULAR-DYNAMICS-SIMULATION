@@ -1,1 +1,1 @@
-cd build && cmake -S .. -B . && make && ./simulation.exe
+cd build && cmake -S .. -B . && make && gdb ./simulation.exe 66

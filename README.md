@@ -45,16 +45,18 @@ To run the MOLECULAR DYNAMICS SIMULATION on a Windows system, you need to set up
 5. **Environment Variable for PovRay**: To access PovRay from the Windows shell environment, you need to set the corresponding environment variable. Follow the steps below:
 
 Add the Povray bin location to the environment variables path
-
+```
 'C:\Program Files\POV-Ray\v3.7\bin'
-
+```
 ## Running the Simulation
 
 Once you have completed the setup process, you are ready to run the MOLECULAR DYNAMICS SIMULATION on your Windows system. Make sure to open the Windows shell environment (e.g., Command Prompt, PowerShell) and navigate to the appropriate directory where the simulation code is located.
 Run the Cygwin64 Terminal from the windows shell with the command
-
+```
 C:\cygwin64\bin\bash.exe
-
+```
 To compile and execute the simulation, use the following commands:
-
+```
 ./build.sh
+
+```

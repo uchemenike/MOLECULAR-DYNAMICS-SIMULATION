@@ -27,8 +27,8 @@
 (v2).x = (s1) * (v1).x, \
 (v2).y = (s1) * (v1).y
 #define VProd(v) ((v).x * (v).y)
-
-#define VCSum(v) ((v).x + (v).y + (v).z)
+//here
+#define VCSum(v) ((v).x + (v).y)
 
 #define VMul(v1, v2, v3) \
 (v1).x = (v2).x * (v3).x, \
@@ -38,7 +38,7 @@
 (v1).y = (v2).y + (v3).y
 
 #define VDiv(v1, v2, v3) \
-(v1).x = (v2).x / (v3).x
+(v1).x = (v2).x / (v3).x 
 
 #define VScale(v, s) \
 (v).x *= s, \

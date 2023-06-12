@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <windows.h>
+
 #define NameI(x) {#x, &x, N_I, sizeof (x) / sizeof (int)}
 #define NameR(x) {#x, &x, N_R, sizeof (x) / sizeof (real)}
 #define NP_I ((int *) (nameList[k].vPtr) + j)
@@ -23,11 +24,11 @@
 #define WriteF(x) fwrite (&x, sizeof (x), 1, fp)
 #define WriteFN(x, n) fwrite (x, sizeof (x[0]), n, fp)
 
-
 #define VSCopy(v2, s1, v1) \
 (v2).x = (s1) * (v1).x, \
 (v2).y = (s1) * (v1).y, \
 (v2).y = (s1) * (v1).z
+
 #define VProd(v) ((v).x * (v).y * (v).z)
 
 #define VCSum(v) ((v).x + (v).y + (v).z)
@@ -43,7 +44,9 @@
 (v1).z = (v2).z + (v3).z
 
 #define VDiv(v1, v2, v3) \
-(v1).x = (v2).x / (v3).x
+(v1).x = (v2).x / (v3).x, \
+(v1).y = (v2).y / (v3).y,\
+(v1).z = (v2).z / (v3).z
 
 #define VScale(v, s) \
 (v).x *= s, \
@@ -117,6 +120,7 @@ int countVel, limitVel, sizeHistVel, stepVel;
 #define MASK 2147483647
 #define SCALE 0.4656612873e-9
 int randSeedP = 17;
+int stepAdjustTemp;
 
 #define N_OFFSET 14
 
@@ -165,6 +169,10 @@ mol[n].ra1, mol[n].ra2, t)
 PCV4 (mol[n].r, mol[n].ro, mol[n].rv, mol[n].ra, \
 mol[n].ra1, mol[n].ra2, t)
 
+
+#define VComp(v, k) \
+*((k == 0) ? &(v).x : ((k == 1) ? &(v).y : &(v).z))
+
 enum {ERR_NONE, ERR_BOND_SNAPPED, ERR_CHECKPT_READ, ERR_CHECKPT_WRITE,
 ERR_COPY_BUFF_FULL, ERR_EMPTY_EVPOOL, ERR_MSG_BUFF_FULL,
 ERR_OUTSIDE_REGION, ERR_SNAP_READ, ERR_SNAP_WRITE,
@@ -181,7 +189,7 @@ char *errorMsg[] = {"", "bond snapped", "read checkpoint data",
 
 
 int doCheckpoint = FALSE;
-
+int stepInitlzTemp;
 
 enum {FL_CHECKA, FL_CHECKB, FL_CKLAST, FL_SNAP};
 char *fileNameR[] = {"xxnnchecka.data", "xxnncheckb.data",
@@ -207,7 +215,13 @@ typedef struct {
 } Quat;
 
 typedef struct {
-    VecR r, rv, ra, ra1, ra2, ro, rvo;
+    VecR r;     // position
+    VecR rv;    // velocity
+    VecR ra;    // acceleration
+    VecR ra1;   // acceleration at time step (t - Δt)
+    VecR ra2;   // acceleration at time step (t - 2Δt)
+    VecR ro;    // position at time step (t - Δt)
+    VecR rvo;   // velocity at time step (t - Δt)
     Quat q, qv, qa, qa1, qa2, qo, qvo;
     VecR torq;
 } Mol; 
@@ -261,10 +275,11 @@ typedef struct {
  * @brief Struct defining a vertex.
  */
 typedef struct {
-    VecR pos; ///< Position of the vertex.
-    real distSq; ///< Square distance of the vertex.
-    int e[3]; ///< Array of edge indices connected to the vertex.
-    int stat; ///< Status of the vertex.
+    VecR pos;        // Position of the vertex.
+    real distSq;     // Square distance of the vertex.
+    int e[3];        // Array of edge indices connected to the vertex.
+    int stat;        // Status of the vertex.
+    Flist* faces;    // List of faces connected to the vertex.
 } Vert;
 
 
@@ -297,11 +312,10 @@ POVRayWriter* writer;
 
 Mol *mol;
 VecR region, vSum;
-VecI initUcell, cells;
-int *cellList;
+VecI initUcell;
 Prop kinEnergy, pressure, totEnergy;
-real deltaT, density, rCut, temperature, timeNow, uSum, velMag, virSum, vvSum, *histVel, rangeVel, dispHi, rNebrShell, kinEnInitSum;
-int moreCycles, nMol, stepAvg, stepCount, stepEquil, stepLimit, *nebrTab, nebrNow, nebrTabFac, nebrTabLen, nebrTabMax, stepInitlzTemp;
+real *valTrajDev, pertTrajDev, deltaT, density, rCut, temperature, timeNow, uSum, velMag, virSum, vvSum, *histVel, rangeVel, dispHi, rNebrShell, kinEnInitSum;
+int countTrajDev, limitTrajDev, stepTrajDev, moreCycles, nMol, stepAvg, stepCount, stepEquil, stepLimit, *nebrTab, nebrNow, nebrTabFac, nebrTabLen, nebrTabMax, stepInitlzTemp;
 NameList nameList[] = {
     NameR (deltaT),
     NameR (density),
@@ -312,6 +326,11 @@ NameList nameList[] = {
     NameI (stepInitlzTemp),
     NameR (temperature),
     NameI (nebrTabFac),
+    NameI (stepInitlzTemp),
+    NameI (stepAdjustTemp),
+    NameI (limitTrajDev),
+    NameR (pertTrajDev),
+    NameI (stepTrajDev),
     NameR (rNebrShell)
 };
 

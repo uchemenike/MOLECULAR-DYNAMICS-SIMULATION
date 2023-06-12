@@ -235,7 +235,7 @@ void SetParams()
 
     VSCopy (cells, 1. / (rCut + rNebrShell), region);
     nebrTabMax = nebrTabFac * nMol;
-    kinEnInitSum = 0;
+    kinEnInitSum = 0.;
 }
 
 void LeapfrogStep(int part)
@@ -256,6 +256,7 @@ void ApplyBoundaryCond()
     int n;
     DO_MOL VWrapAll(mol[n].r);
 }
+
 void EvalProps()
 {
     real vvMax;
@@ -352,6 +353,9 @@ void CorrectorStep()
     }
 }
 
+/**
+ * @brief Adjusts the initial temperature of the simulation.
+ */
 void AdjustInitTemp()
 {
     real vFac;
@@ -359,89 +363,201 @@ void AdjustInitTemp()
 
     kinEnInitSum += kinEnergy.val;
 
-    if (stepCount % stepInitlzTemp == 0) {
+    if (stepCount % stepInitlzTemp == 0)
+    {
         kinEnInitSum /= stepInitlzTemp;
-        vFac = velMag / sqrt(2. * kinEnInitSum);
+        vFac = velMag / sqrt(2.0 * kinEnInitSum);
 
-        DO_MOL
-        {
-            VScale(mol[n].rv, vFac);
-        }
+        // Scale the velocity of each molecule
+        DO_MOL VScale(mol[n].rv, vFac);
 
-        kinEnInitSum = 0.;
+        kinEnInitSum = 0.0;
     }
 }
 
-void SingleStep () {
-    ++ stepCount;
+
+/**
+ * @brief Adjusts the temperature of the simulation.
+ */
+void AdjustTemp()
+{
+    real vFac;
+    int n;
+
+    // Calculate the sum of squared velocities
+    real vvSum = 0.0;
+    DO_MOL
+    vvSum += VLenSq(mol[n].rv);
+
+    // Calculate the velocity scaling factor
+    vFac = velMag / sqrt(vvSum / nMol);
+
+    // Scale the velocities of all molecules
+    DO_MOL
+    VScale(mol[n].rv, vFac);
+}
+
+
+/**
+ * @brief Performs a single step in the simulation.
+ */
+void SingleStep() {
+    /** Increase the step count */
+    ++stepCount;
+    /** Calculate the current time */
     timeNow = stepCount * deltaT;
-    // LeapfrogStep (1);
-    PredictorStep ();
-    ApplyBoundaryCond ();
+
+    // LeapfrogStep(1);
+    PredictorStep();
+    ApplyBoundaryCond();
+
+    /** Check if neighbor list needs to be updated */
     if (nebrNow) {
         nebrNow = 0;
         dispHi = 0.;
-        BuildNebrList ();
-        }
-    ComputeForces ();
-    // LeapfrogStep (2);
-    CorrectorStep ();
-    EvalProps ();
-    AccumProps (1);
+        BuildNebrList();
+    }
+
+    ComputeForces();
+    // LeapfrogStep(2);
+    CorrectorStep();
+    EvalProps();
+    AccumProps(1);
+
+    /** Check if it's time to average properties */
     if (stepCount % stepAvg == 0) {
-        AccumProps (2);
-        if (stepCount < stepEquil) AdjustInitTemp ();
-        PrintSummary (stdout);
-        AccumProps (0);
+        AccumProps(2);
+
+        /** Adjust temperature periodically */
+        // if (stepCount % stepAdjustTemp == 0)
+        //    AdjustTemp();
+
+        /** Adjust initial temperature before equilibrium */
+        // if (stepCount < stepEquil)
+        //    AdjustInitTemp();
+
+        PrintSummary(stdout);
+        AccumProps(0);
+    }
+
+    /** Check if it's time to perturb trajectory deviation */
+    if (stepCount == stepEquil)
+        PerturbTrajDev();
+
+    /** Check if it's time to measure trajectory deviation */
+    if (stepCount > stepEquil && (stepCount - stepEquil) % stepTrajDev == 0) {
+        MeasureTrajDev();
+
+        /** Check if trajectory deviation limit reached */
+        if (countTrajDev == limitTrajDev) {
+            PrintTrajDev(stdout);
+            PerturbTrajDev();
+            BuildNebrList();
+        }
     }
 }
+
+/**
+ * @brief Prints the trajectory deviation values to a file.
+ *
+ * This function prints the trajectory deviation values to the specified file.
+ *
+ * @param fp The file pointer to write the values to.
+ */
+void PrintTrajDev(FILE *fp)
+{
+    real tVal;
+    int n;
+
+    for (n = 0; n < limitTrajDev; n++) {
+        tVal = (n + 1) * stepTrajDev * deltaT;
+        fprintf(fp, "%.4e %.4e\n", tVal, valTrajDev[n]);
+    }
+}
+
+/**
+ * Random arrangement
+*/
 
 void InitCoords()
 {
-    VecR c, gap;
-    int j, n, nx, ny, nz;
+    real randTab[100];
+    int i, n, k;
 
-    VDiv(gap, region, initUcell);
+    for (i = 0; i < 100; i++)
+        randTab[i] = RandR();
 
-    // An obvious way of reducing equilibration time is to base the initial state on the final state of a previous run.
-    n = 0;
-    for (nz = 0; nz < initUcell.z; nz++) {
-        for (ny = 0; ny < initUcell.y; ny++) {
-            for (nx = 0; nx < initUcell.x; nx++) {
-                VSet(c, nx + 0.25, ny + 0.25, nz + 0.25);
-                VMul(c, c, gap);
-                
-                VVSAdd(c, -0.5, region);
-                for (j = 0; j < 4; j++) {
-                    mol[n].r = c;
-                    if (j != 3) {
-                        if (j != 0) mol[n].r.x += 0.5 * gap.x;
-                        if (j != 1) mol[n].r.y += 0.5 * gap.y;
-                        if (j != 2) mol[n].r.z += 0.5 * gap.z;
-                    }
-                    ++n;
-                }
-            }
+    for (n = 0; n < nMol; n++)
+    {
+        for (k = 0; k < NDIM; k++)
+        {
+            i = (int)(100. * RandR());
+            VComp(mol[n].r, k) = (randTab[i] - 0.5) * VComp(region, k);
+            randTab[i] = RandR();
         }
     }
 }
 
-
+/**
+ * @brief Initializes the velocities of the molecules.
+ *
+ * This function initializes the velocities of the molecules by assigning random velocities to every other molecule.
+ * The velocities are scaled by the `velMag` value, and the sum of the velocities is calculated and stored in `vSum`.
+ * Finally, the average velocity is subtracted from each molecule's velocity.
+ */
 void InitVels()
 {
     int n;
     VZero(vSum);
 
-    DO_MOL {
+    for (n = 0; n < nMol; n += 2) {
         VRand(&mol[n].rv);
         VScale(mol[n].rv, velMag);
-        VVAdd(vSum, mol[n].rv);
+        mol[n + 1].rv = mol[n].rv;
+        VVSAdd(vSum, 2.0, mol[n].rv);
     }
 
-    DO_MOL
-    {
-        VVSAdd(mol[n].rv, -1. / nMol, vSum);
+    DO_MOL VVSAdd(mol[n].rv, -1.0 / nMol, vSum);
+}
+
+/**
+ * @brief Perturbs the trajectory deviation.
+ *
+ * This function perturbs the trajectory deviation for a given set of molecules.
+ */
+void PerturbTrajDev()
+{
+    VecR w;
+    int n;
+
+    for (n = 0; n < nMol; n += 2) {
+        mol[n + 1].r = mol[n].r;
+        VRand(&w);
+        VMul(w, w, mol[n].rv);
+        VSAdd(mol[n + 1].rv, mol[n].rv, pertTrajDev, w);
     }
+
+    countTrajDev = 0;
+}
+
+/**
+ * @brief Measures the trajectory deviation.
+ */
+void MeasureTrajDev()
+{
+    VecR dr;
+    real dSum;
+    int n;
+
+    dSum = 0.0;
+    for (n = 0; n < nMol; n += 2) {
+        VSub(dr, mol[n + 1].r, mol[n].r);
+        VWrapAll(dr);
+        dSum += VLenSq(dr);
+    }
+
+    valTrajDev[countTrajDev] = sqrt(dSum / (0.5 * nMol));
+    ++countTrajDev;
 }
 
 void InitAccels()
@@ -450,6 +566,8 @@ void InitAccels()
     DO_MOL
     {
         VZero(mol[n].ra);
+        VZero (mol[n].ra1);
+        VZero (mol[n].ra2);
     }
 }
 void AllocArrays ()
@@ -458,6 +576,7 @@ void AllocArrays ()
     AllocMem (histVel, sizeHistVel, real);
     AllocMem (nebrTab, 2 * nebrTabMax, int);
     AllocMem (cellList, VProd (cells) + nMol, int);
+    AllocMem (valTrajDev, limitTrajDev, real);
 }
 
 void SetupJob () {
@@ -603,6 +722,8 @@ void BuildNebrList()
         VSAdd(rs, mol[n].r, 0.5, region);
         VMul(cc, rs, invWid);
         c = VLinear(cc, cells) + nMol;
+        if (n <= 0)
+            break;
         cellList[n] = cellList[c];
         cellList[c] = n;
     }
@@ -623,7 +744,7 @@ void BuildNebrList()
 
                     DO_CELL(j1, m1) {
                         DO_CELL(j2, m2) {
-                            if (m1 != m2 || j2 < j1) {
+                            if ((j1 - j2) % 2 == 0 && (m1 != m2 || j2 < j1)) {
                                 VSub(dr, mol[j1].r, mol[j2].r);
                                 VVSub(dr, shift);
 
@@ -772,6 +893,7 @@ void scaleData(int* x, int* y, int* z) {
     *y *= scaleY;
     *z *= scaleZ;
 }
+
 int main(int argc, char **argv) {
     GetNameList(argc, argv);
     PrintNameList(stdout);
